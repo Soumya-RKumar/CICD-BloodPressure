@@ -1,0 +1,58 @@
+name: Blood Pressure Calculator CI
+
+on:
+  push:
+    branches:
+      - feature/bp-category-calculation
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore BPCalculator.sln -p:WarningsAsErrors=NU1903
+
+      - name: Build solution
+        run: dotnet build BPCalculator.sln --configuration Release --no-restore
+
+      - name: Run tests and collect coverage
+        run: dotnet test BPCalculator.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
+
+      - name: Check NuGet vulnerabilities
+        run: dotnet list BPCalculator.sln package --vulnerable --include-transitive
+
+      - name: Enforce 80% line coverage
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem "./BPCalculator.Tests/TestResults" -Filter "coverage.cobertura.xml" -Recurse |
+                  Select-Object -First 1
+
+          if (-not $file) {
+              Write-Error "Coverage report not found"
+              exit 1
+          }
+
+          [xml]$report = Get-Content $file.FullName
+          $coverage = [double]$report.coverage.'line-rate' * 100
+
+          Write-Host "Line coverage: $coverage%"
+
+          if ($coverage -lt 80) {
+              Write-Error "Coverage is below the required 80%"
+              exit 1
+          }
+
+          Write-Host "Coverage requirement satisfied"
