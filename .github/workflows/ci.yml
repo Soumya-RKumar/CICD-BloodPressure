@@ -16,20 +16,37 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      
+      - name: Install SonarScanner for .NET
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
       - name: Restore dependencies
         run: dotnet restore BPCalculator.sln -p:WarningsAsErrors=NU1903
+
+      - name: Begin SonarQube analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet sonarscanner begin \
+            /k:"Soumya-RKumar_CICD-BloodPressure" \
+            /o:"soumya-rkumar" \
+            /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" 
 
       - name: Build solution
         run: dotnet build BPCalculator.sln --configuration Release --no-restore
 
       - name: Run tests and collect coverage
-        run: dotnet test BPCalculator.sln --configuration Release --no-build --collect:"XPlat Code Coverage"
+        run: dotnet test BPCalculator.sln --configuration Release --no-build --collect:"XPlat Code Coverage;Format=opencover,cobertura"
 
       - name: Check NuGet vulnerabilities
         run: dotnet list BPCalculator.sln package --vulnerable --include-transitive
@@ -56,3 +73,8 @@ jobs:
           }
 
           Write-Host "Coverage requirement satisfied"
+      
+      - name: Complete SonarQube analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
